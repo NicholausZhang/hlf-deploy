@@ -22,15 +22,29 @@ import (
 )
 
 type Mod string
+type ConsensusState string
 
 const (
 	ModifiedModAdd Mod = "Add"
 	ModifiedModDel Mod = "Del"
+
+	StateNormal      ConsensusState = "STATE_NORMAL"
+	StateMaintenance ConsensusState = "STATE_MAINTENANCE"
 )
 
 var (
 	client *rpc.Client
 )
+
+func GetConsensusState(status string) ConsensusState {
+	switch status {
+	case "Normal":
+		return StateNormal
+	case "Maintenance":
+		return StateMaintenance
+	}
+	return ""
+}
 
 func SDKNew(fabconfig string) *fabsdk.FabricSDK {
 	sdk, err := fabsdk.New(config.FromFile(fabconfig))
@@ -284,7 +298,7 @@ func GetChannelParamsModifiedConfig(configBytes []byte,
 		}
 	}
 
-	var values interface{}
+	var values map[string]interface{}
 	if sysChannel {
 		values = cfg.(*SystemConfig).ChannelGroup.Groups.Orderer.Values
 	} else {
@@ -292,19 +306,96 @@ func GetChannelParamsModifiedConfig(configBytes []byte,
 	}
 
 	if batchTimeout != "" {
-		values.(map[string]interface{})["BatchTimeout"].(map[string]interface{})["value"].(map[string]interface{})["timeout"] = batchTimeout
+		values["BatchTimeout"].(map[string]interface{})["value"].(map[string]interface{})["timeout"] = batchTimeout
 	}
 
 	if batchSizeAbsolute != "" {
-		values.(map[string]interface{})["BatchSize"].(map[string]interface{})["value"].(map[string]interface{})["absolute_max_bytes"] = convertStorageUnit(batchSizeAbsolute)
+		values["BatchSize"].(map[string]interface{})["value"].(map[string]interface{})["absolute_max_bytes"] = convertStorageUnit(batchSizeAbsolute)
 	}
 
 	if batchSizeMessage != 0 {
-		values.(map[string]interface{})["BatchSize"].(map[string]interface{})["value"].(map[string]interface{})["max_message_count"] = batchSizeMessage
+		values["BatchSize"].(map[string]interface{})["value"].(map[string]interface{})["max_message_count"] = batchSizeMessage
 	}
 
 	if batchSizePreferred != "" {
-		values.(map[string]interface{})["BatchSize"].(map[string]interface{})["value"].(map[string]interface{})["preferred_max_bytes"] = convertStorageUnit(batchSizePreferred)
+		values["BatchSize"].(map[string]interface{})["value"].(map[string]interface{})["preferred_max_bytes"] = convertStorageUnit(batchSizePreferred)
+	}
+
+	modifiedConfigBytes, err := json.Marshal(cfg)
+	if err != nil {
+		log.Fatalln("marshal modified cfg json error:", err)
+	}
+
+	return modifiedConfigBytes
+}
+
+func GetChannelConsensusStateModifiedConfig(configBytes []byte, consensusState ConsensusState, consensusType string,
+	consensusOptionElectionTick, consensusOptionHeartbeatTick, consensusOptionMaxInflightBlocks int,
+	consensusOptionSnapshotIntervalSize, consensusOptionTickInterval string,
+	sysChannel bool) []byte {
+	var cfg interface{}
+
+	if configBytes != nil {
+		if sysChannel {
+			cfg = new(SystemConfig)
+		} else {
+			cfg = new(Config)
+		}
+
+		if err := json.Unmarshal(configBytes, cfg); err != nil {
+			log.Fatalln(err)
+		}
+	}
+
+	var values map[string]interface{}
+	if sysChannel {
+		values = cfg.(*SystemConfig).ChannelGroup.Groups.Orderer.Values
+	} else {
+		values = cfg.(*Config).ChannelGroup.Groups.Orderer.Values
+	}
+
+	consensusTypeMap := getMap(values, "ConsensusType")
+	valueMap := getMap(consensusTypeMap, "value")
+	metadataMap := getMap(valueMap, "metadata")
+	optionsMap := getMap(metadataMap, "options")
+
+	switch {
+	case consensusState != "":
+		valueMap["state"] = consensusState
+	case consensusType != "":
+		if consensusType == "etcdraft" {
+			if consensusOptionElectionTick == 0 {
+				consensusOptionElectionTick = 10
+			}
+			if consensusOptionHeartbeatTick == 0 {
+				consensusOptionHeartbeatTick = 1
+			}
+			if consensusOptionMaxInflightBlocks == 0 {
+				consensusOptionMaxInflightBlocks = 5
+			}
+			if consensusOptionSnapshotIntervalSize == "" {
+				consensusOptionSnapshotIntervalSize = "20MB"
+			}
+			if consensusOptionTickInterval == "" {
+				consensusOptionTickInterval = "500ms"
+			}
+		}
+		valueMap["type"] = consensusType
+		fallthrough
+	case consensusOptionElectionTick != 0:
+		optionsMap["election_tick"] = consensusOptionElectionTick
+		fallthrough
+	case consensusOptionHeartbeatTick != 0:
+		optionsMap["heartbeat_tick"] = consensusOptionElectionTick
+		fallthrough
+	case consensusOptionMaxInflightBlocks != 0:
+		optionsMap["max_inflight_blocks"] = consensusOptionMaxInflightBlocks
+		fallthrough
+	case consensusOptionSnapshotIntervalSize != "":
+		optionsMap["snapshot_interval_size"] = convertStorageUnit(consensusOptionSnapshotIntervalSize)
+		fallthrough
+	case consensusOptionTickInterval != "":
+		optionsMap["tick_interval"] = consensusOptionTickInterval
 	}
 
 	modifiedConfigBytes, err := json.Marshal(cfg)
@@ -368,4 +459,11 @@ func convertStorageUnit(data string) int64 {
 	}
 
 	return 0
+}
+
+func getMap(data map[string]interface{}, key string) map[string]interface{} {
+	if data[key] == nil {
+		data[key] = make(map[string]interface{})
+	}
+	return data[key].(map[string]interface{})
 }

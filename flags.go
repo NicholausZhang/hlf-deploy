@@ -1,6 +1,8 @@
 package main
 
-import "github.com/spf13/cobra"
+import (
+	"github.com/spf13/cobra"
+)
 
 var (
 	fabconfig             string
@@ -24,6 +26,18 @@ var (
 	batchSizeAbsolute     string
 	batchSizeMessage      int
 	batchSizePreferred    string
+
+	consensusState                       string
+	consensusType                        string
+	consensusOptionElectionTick          int
+	consensusOptionHeartbeatTick         int
+	consensusOptionMaxInflightBlocks     int
+	consensusOptionSnapshotIntervalSize  string
+	consensusOptionTickInterval          string
+	consensusConsentersHost              string
+	consensusConsentersPort              string
+	consensusConsentersClientTLSCertPath string
+	consensusConsentersServerTLSCertPath string
 )
 
 func init() {
@@ -34,6 +48,7 @@ func init() {
 	channelCmd.AddCommand(uptateAnchorPeerCmd)
 	channelCmd.AddCommand(joinChannelCmd)
 	channelCmd.AddCommand(updateChannelParamCmd)
+	channelCmd.AddCommand(updateChannelStateCmd)
 
 	rootCmd.AddCommand(chaincodeCmd)
 	chaincodeCmd.AddCommand(installChaincodeCmd)
@@ -46,6 +61,8 @@ func init() {
 	organiztionCmd.AddCommand(addOrgChannelCmd)
 	organiztionCmd.AddCommand(updateOrgChannelCmd)
 	organiztionCmd.AddCommand(delOrgChannelCmd)
+
+	rootCmd.AddCommand(consensusCmd)
 
 	createChannelCmd.Flags().StringVar(&fabconfig, "configFile", "config.yaml", "Fabric SDK config file path.")
 	createChannelCmd.Flags().StringVar(&channelTX, "channelTxFile", "channel.tx", "Channel TX file path.")
@@ -130,4 +147,17 @@ func init() {
 	updateChannelParamCmd.Flags().StringVar(&batchSizeAbsolute, "absoluteMaxBytes", "99MB", "set batch size absolute max bytes.")
 	updateChannelParamCmd.Flags().StringVar(&batchSizePreferred, "preferredMaxBytes", "512KB", "set batch size preferred max bytes.")
 	updateChannelParamCmd.Flags().IntVar(&batchSizeMessage, "sizeMessageMaxCount", 10, "set batch size max message count.")
+
+	updateChannelStateCmd.Flags().StringVar(&fabconfig, "configFile", "config.yaml", "Fabric SDK config file path.")
+	updateChannelStateCmd.Flags().StringVar(&ordererOrgName, "ordererOrgName", "OrdererOrg", "Orderer organitztion name.")
+	updateChannelStateCmd.Flags().BoolVar(&sysChannel, "sysChannel", false, "Channel is system channel.")
+	updateChannelStateCmd.Flags().StringVar(&channelName, "channelName", "mychannel", "Channel name.")
+	updateChannelStateCmd.Flags().StringVar(&rpcAddress, "rpcAddress", "localhost:1234", "hlf-tools Address.")
+	updateChannelStateCmd.Flags().StringVar(&consensusState, "state", "", "Channel consensus state.")
+	updateChannelStateCmd.Flags().StringVar(&consensusType, "type", "", "Channel consensus type.")
+	updateChannelStateCmd.Flags().IntVar(&consensusOptionElectionTick, "electionTick", 0, "Channel consensus etcdraft option election tick.")
+	updateChannelStateCmd.Flags().IntVar(&consensusOptionHeartbeatTick, "heartbeatTick", 0, "Channel consensus etcdraft option heartbeat tick.")
+	updateChannelStateCmd.Flags().IntVar(&consensusOptionMaxInflightBlocks, "maxInflightBlocks", 0, "Channel consensus etcdraft option max inflight blocks.")
+	updateChannelStateCmd.Flags().StringVar(&consensusOptionSnapshotIntervalSize, "snapshotIntervalSize", "", "Channel consensus etcdraft option snapshot interval size.")
+	updateChannelStateCmd.Flags().StringVar(&consensusOptionTickInterval, "tickInterval", "", "Channel consensus etcdraft option tick interval.")
 }
